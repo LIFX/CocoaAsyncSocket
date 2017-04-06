@@ -210,6 +210,8 @@ enum GCDAsyncUdpSocketConfig
 #endif
 	
 	id userData;
+
+	NSMutableDictionary *cachedAddresses;
 }
 
 - (void)resumeSend4Source;
@@ -422,7 +424,8 @@ enum GCDAsyncUdpSocketConfig
 		
 		currentSend = nil;
 		sendQueue = [[NSMutableArray alloc] initWithCapacity:5];
-		
+		cachedAddresses = [[NSMutableDictionary alloc] init];
+
 		#if TARGET_OS_IPHONE
 		[[NSNotificationCenter defaultCenter] addObserver:self
 		                                         selector:@selector(applicationWillEnterForeground:)
@@ -1172,44 +1175,43 @@ enum GCDAsyncUdpSocketConfig
 		else
 		{
 			NSString *portStr = [NSString stringWithFormat:@"%hu", port];
-			
-			struct addrinfo hints, *res, *res0;
-			
-			memset(&hints, 0, sizeof(hints));
-			hints.ai_family   = PF_UNSPEC;
-			hints.ai_socktype = SOCK_DGRAM;
-			hints.ai_protocol = IPPROTO_UDP;
-			
-			int gai_error = getaddrinfo([host UTF8String], [portStr UTF8String], &hints, &res0);
-			
-			if (gai_error)
-			{
-				error = [self gaiError:gai_error];
-			}
-			else
-			{
-				for(res = res0; res; res = res->ai_next)
-				{
-					if (res->ai_family == AF_INET)
-					{
-						// Found IPv4 address
-						// Wrap the native address structure and add to list
-						
-						[addresses addObject:[NSData dataWithBytes:res->ai_addr length:res->ai_addrlen]];
+			NSMutableArray *cachedAddress = cachedAddresses[[NSString stringWithFormat:@"%s:%s", [host UTF8String], [portStr UTF8String]]];
+			if (cachedAddress != nil) {
+				addresses = cachedAddress;
+			} else {
+
+				struct addrinfo hints, *res, *res0;
+
+				memset(&hints, 0, sizeof(hints));
+				hints.ai_family = PF_UNSPEC;
+				hints.ai_socktype = SOCK_DGRAM;
+				hints.ai_protocol = IPPROTO_UDP;
+				NSLog(@"getaddrinfo %s", [host UTF8String]);
+				int gai_error = getaddrinfo([host UTF8String], [portStr UTF8String], &hints, &res0);
+
+				if (gai_error) {
+					error = [self gaiError:gai_error];
+				} else {
+					for (res = res0; res; res = res->ai_next) {
+						if (res->ai_family == AF_INET) {
+							// Found IPv4 address
+							// Wrap the native address structure and add to list
+
+							[addresses addObject:[NSData dataWithBytes:res->ai_addr length:res->ai_addrlen]];
+						} else if (res->ai_family == AF_INET6) {
+							// Found IPv6 address
+							// Wrap the native address structure and add to list
+
+							[addresses addObject:[NSData dataWithBytes:res->ai_addr length:res->ai_addrlen]];
+						}
 					}
-					else if (res->ai_family == AF_INET6)
-					{
-						// Found IPv6 address
-						// Wrap the native address structure and add to list
-						
-						[addresses addObject:[NSData dataWithBytes:res->ai_addr length:res->ai_addrlen]];
+					freeaddrinfo(res0);
+
+					if ([addresses count] == 0) {
+						error = [self gaiError:EAI_FAIL];
+					} else {
+						cachedAddresses[[NSString stringWithFormat:@"%s:%s", [host UTF8String], [portStr UTF8String]]] = addresses;
 					}
-				}
-				freeaddrinfo(res0);
-				
-				if ([addresses count] == 0)
-				{
-					error = [self gaiError:EAI_FAIL];
 				}
 			}
 		}
