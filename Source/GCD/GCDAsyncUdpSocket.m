@@ -212,6 +212,7 @@ enum GCDAsyncUdpSocketConfig
 	id userData;
 
 	NSMutableDictionary *cachedAddresses;
+	NSLock *cachedAddressesLock;
 }
 
 - (void)resumeSend4Source;
@@ -425,8 +426,9 @@ enum GCDAsyncUdpSocketConfig
 		currentSend = nil;
 		sendQueue = [[NSMutableArray alloc] initWithCapacity:5];
 		cachedAddresses = [[NSMutableDictionary alloc] init];
+		cachedAddressesLock = [[NSLock alloc] init];
 
-		#if TARGET_OS_IPHONE
+#if TARGET_OS_IPHONE
 		[[NSNotificationCenter defaultCenter] addObserver:self
 		                                         selector:@selector(applicationWillEnterForeground:)
 		                                             name:UIApplicationWillEnterForegroundNotification
@@ -1175,7 +1177,9 @@ enum GCDAsyncUdpSocketConfig
 		else
 		{
 			NSString *portStr = [NSString stringWithFormat:@"%hu", port];
+			[cachedAddressesLock lock];
 			NSMutableArray *cachedAddress = cachedAddresses[[NSString stringWithFormat:@"%s:%s", [host UTF8String], [portStr UTF8String]]];
+			[cachedAddressesLock unlock];
 			if (cachedAddress != nil) {
 				addresses = cachedAddress;
 			} else {
@@ -1210,7 +1214,9 @@ enum GCDAsyncUdpSocketConfig
 					if ([addresses count] == 0) {
 						error = [self gaiError:EAI_FAIL];
 					} else {
+						[cachedAddressesLock lock];
 						cachedAddresses[[NSString stringWithFormat:@"%s:%s", [host UTF8String], [portStr UTF8String]]] = addresses;
+						[cachedAddressesLock unlock];
 					}
 				}
 			}
