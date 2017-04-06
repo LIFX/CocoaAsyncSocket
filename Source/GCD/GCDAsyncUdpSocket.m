@@ -1190,7 +1190,7 @@ enum GCDAsyncUdpSocketConfig
 				hints.ai_family = PF_UNSPEC;
 				hints.ai_socktype = SOCK_DGRAM;
 				hints.ai_protocol = IPPROTO_UDP;
-				NSLog(@"getaddrinfo %s", [host UTF8String]);
+
 				int gai_error = getaddrinfo([host UTF8String], [portStr UTF8String], &hints, &res0);
 
 				if (gai_error) {
